@@ -1,0 +1,24 @@
+[2026-10-23T03:24:53.795Z] ERROR: ◇ injected env (0) from .env
+[2026-10-23T03:24:54.500Z] INFO: App loaded successfully
+[2026-10-23T03:24:54.501Z] INFO: Connecting to MongoDB...
+[2026-10-23T03:24:54.501Z] ERROR: MongoDB Connection Failed
+[2026-10-23T03:24:54.502Z] ERROR: Error name: Error
+[2026-10-23T03:24:54.502Z] ERROR: Error message: MongoDB connection string is missing
+[2026-10-23T03:24:54.504Z] ERROR: Full error: Error: MongoDB connection string is missing
+    at connectDB (C:\Users\User05\Documents\Bluely_admin\bluely_server\src\config\db.js:14:13)
+    at Object.<anonymous> (C:\Users\User05\Documents\Bluely_admin\bluely_server\server.js:71:3)
+    at Module._compile (node:internal/modules/cjs/loader:1521:14)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1623:10)
+    at Module.load (node:internal/modules/cjs/loader:1266:32)
+    at Module._load (node:internal/modules/cjs/loader:1091:12)
+    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:164:12)
+    at node:internal/main/run_main_module:28:49
+[2026-10-23T03:27:53.389Z] ERROR: ◇ injected env (10) from .env
+[2026-10-23T03:27:53.765Z] ERROR: ◇ injected env (10) from .env
+[2026-10-23T03:27:54.501Z] INFO: App loaded successfully
+[2026-10-23T03:27:54.502Z] INFO: Connecting to MongoDB...
+[2026-10-23T03:27:54.508Z] INFO: Environment: production
+[2026-10-23T03:27:54.509Z] INFO: MongoDB URI exists: true
+[2026-10-23T03:27:54.542Z] INFO: Server running on port 5008
+[2026-10-23T03:27:54.543Z] INFO: Bluely backend started successfully
+[2026-10-23T03:27:55.128Z] INFO: MongoDB Connected Successfully!!

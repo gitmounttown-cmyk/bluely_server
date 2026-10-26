@@ -1,6 +1,7 @@
-
 const express = require("express");
 const router = express.Router();
+const uploadProductImage = require("../middleware/uploadMiddleware");
+const { verifyToken, allowRoles } = require("../middleware/authMiddleware");
 
 const {
   createProduct,
@@ -8,25 +9,33 @@ const {
   getProductById,
   updateProduct,
   deleteProduct,
-  getInventorySummary,
 } = require("../controller/productController");
 
-// Create
-router.post("/create", createProduct);
+// Create product with image (Admin Only)[cite: 23]
+router.post(
+  "/create",
+  verifyToken,
+  allowRoles("Admin"),
+  uploadProductImage.single("image"),
+  createProduct
+);
 
-// Inventory summary - keep before /:id
-router.get("/inventory/summary", getInventorySummary);
+// Get all products (Admin & Cashier - needed for POS billing catalog)[cite: 23]
+router.get("/all", verifyToken, allowRoles("Admin", "Cashier"), getAllProducts);
 
-// Get all products; supports search, category and stock filters
-router.get("/all", getAllProducts);
+// Get product by ID (Admin & Cashier)[cite: 23]
+router.get("/:id", verifyToken, allowRoles("Admin", "Cashier"), getProductById);
 
-// Get one product
-router.get("/:id", getProductById);
+// Update product with optional replacement image (Admin Only)[cite: 23]
+router.put(
+  "/update/:id",
+  verifyToken,
+  allowRoles("Admin"),
+  uploadProductImage.single("image"),
+  updateProduct
+);
 
-// Update
-router.put("/update/:id", updateProduct);
-
-// Delete
-router.delete("/delete/:id", deleteProduct);
+// Delete product and its image (Admin Only)[cite: 23]
+router.delete("/delete/:id", verifyToken, allowRoles("Admin"), deleteProduct);
 
 module.exports = router;

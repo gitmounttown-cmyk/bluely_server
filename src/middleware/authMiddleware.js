@@ -6,22 +6,37 @@ const verifyToken = (req, res, next) => {
     try {
       token = token.split(' ')[1];
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      req.user = decoded;
+      req.user = decoded; // { id, role, email, ... }
       next();
     } catch (error) {
-      res.status(401).json({ message: 'Not authorized, token failed' });
+      return res.status(401).json({ 
+        success: false, 
+        message: 'Not authorized, token failed' 
+      });
     }
   } else {
-    res.status(401).json({ message: 'Not authorized, no token' });
+    return res.status(401).json({ 
+      success: false, 
+      message: 'Not authorized, no token provided' 
+    });
   }
 };
 
-const allowRoles = (req, res, next) => {
-  if (req.user && req.user.role === 'Admin') {
-    next();
-  } else {
-    res.status(403).json({ message: 'Access denied: Admin only' });
-  }
+// Case-insensitive role verification
+const allowRoles = (...roles) => {
+  return (req, res, next) => {
+    const userRole = req.user?.role?.toLowerCase();
+    const allowed = roles.map(r => r.toLowerCase());
+
+    if (req.user && allowed.includes(userRole)) {
+      next();
+    } else {
+      return res.status(403).json({ 
+        success: false, 
+        message: `Access denied: Requires one of roles: ${roles.join(', ')}` 
+      });
+    }
+  };
 };
 
 module.exports = { verifyToken, allowRoles };

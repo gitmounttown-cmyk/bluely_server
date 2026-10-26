@@ -1,7 +1,59 @@
 
 const mongoose = require("mongoose");
+const fs = require("fs/promises");
+const path = require("path");
+
 const Product = require("../model/productModel");
-const Category = require("../model/categortModel");
+
+const uploadDirectory = path.join(
+  process.cwd(),
+  "uploads",
+  "products"
+);
+
+// ==========================================
+// HELPER: DELETE A LOCAL UPLOADED IMAGE
+// ==========================================
+const removeImageFile = async (imageURL) => {
+  if (!imageURL || typeof imageURL !== "string") return;
+
+  // Only delete files belonging to this upload directory
+  const filename = path.basename(imageURL);
+
+  if (filename !== imageURL.replace(/^.*\//, "")) return;
+
+  try {
+    await fs.unlink(path.join(uploadDirectory, filename));
+  } catch (error) {
+    if (error.code !== "ENOENT") {
+      console.error("Image cleanup error:", error.message);
+    }
+  }
+};
+
+// ==========================================
+// HELPER: VALIDATE NUMERIC FORM FIELDS
+// Supports JSON numbers and multipart strings
+// ==========================================
+const parseNumber = (value, field, { min = 0, integer = false } = {}) => {
+  if (value === undefined || value === null || value === "") {
+    return { error: `${field} is required` };
+  }
+
+  const number = Number(value);
+
+  if (
+    !Number.isFinite(number) ||
+    number < min ||
+    (integer && !Number.isInteger(number))
+  ) {
+    return {
+      error: `${field} must be a valid ${integer ? "non-negative integer" : "non-negative number"}`,
+    };
+  }
+
+  return { value: number };
+};
 
 // ==========================================
 // CREATE PRODUCT
@@ -11,79 +63,116 @@ exports.createProduct = async (req, res) => {
   try {
     const {
       name,
-      sku,
       category,
       price,
-      stock = 0,
-      lowStockThreshold = 5,
+      litre,
+      stock,
+      lowStockThreshold,
     } = req.body;
 
-    // Validate required fields
     if (
-      !name?.trim() ||
-      !sku?.trim() ||
-      !category ||
-      price === undefined
+      typeof name !== "string" ||
+      !name.trim() ||
+      typeof category !== "string" ||
+      !category.trim() ||
+      price === undefined ||
+      price === ""
     ) {
+      if (req.file) {
+        await removeImageFile(
+          `/uploads/products/${req.file.filename}`
+        );
+      }
+
       return res.status(400).json({
         success: false,
-        message: "Name, SKU, category and price are required",
+        message: "Name, category and price are required",
       });
     }
 
     if (!mongoose.isValidObjectId(category)) {
+      if (req.file) {
+        await removeImageFile(
+          `/uploads/products/${req.file.filename}`
+        );
+      }
+
       return res.status(400).json({
         success: false,
         message: "Invalid category ID",
       });
     }
 
-    // Validate numeric fields
-    if (
-      typeof price !== "number" ||
-      !Number.isFinite(price) ||
-      price < 0 ||
-      !Number.isInteger(stock) ||
-      stock < 0 ||
-      !Number.isInteger(lowStockThreshold) ||
-      lowStockThreshold < 0
-    ) {
+    const parsedPrice = parseNumber(price, "Price");
+
+    if (parsedPrice.error) {
+      if (req.file) {
+        await removeImageFile(`/uploads/products/${req.file.filename}`);
+      }
+
       return res.status(400).json({
         success: false,
-        message:
-          "Price must be non-negative; stock and threshold must be non-negative integers",
+        message: parsedPrice.error,
       });
     }
 
-    // Verify category exists
-    const categoryExists = await Category.exists({ _id: category });
+    let parsedStock = { value: 0 };
+    let parsedThreshold = { value: 5 };
 
-    if (!categoryExists) {
-      return res.status(404).json({
+    if (stock !== undefined && stock !== "") {
+      parsedStock = parseNumber(stock, "Stock", {
+        integer: true,
+      });
+    }
+
+    if (
+      lowStockThreshold !== undefined &&
+      lowStockThreshold !== ""
+    ) {
+      parsedThreshold = parseNumber(
+        lowStockThreshold,
+        "Low stock threshold",
+        { integer: true }
+      );
+    }
+
+    if (parsedStock.error || parsedThreshold.error) {
+      if (req.file) {
+        await removeImageFile(`/uploads/products/${req.file.filename}`);
+      }
+
+      return res.status(400).json({
         success: false,
-        message: "Category not found",
+        message: parsedStock.error || parsedThreshold.error,
       });
     }
 
-    // Check duplicate SKU
-    const existingProduct = await Product.findOne({
-      sku: sku.trim(),
-    });
+    if (
+      litre !== undefined &&
+      (typeof litre !== "string" || !litre.trim())
+    ) {
+      if (req.file) {
+        await removeImageFile(`/uploads/products/${req.file.filename}`);
+      }
 
-    if (existingProduct) {
-      return res.status(409).json({
+      return res.status(400).json({
         success: false,
-        message: "SKU already exists",
+        message: "Litre must be a non-empty string",
       });
     }
+
+    const imageURL = req.file
+      ? `/uploads/products/${req.file.filename}`
+      : null;
 
     const product = await Product.create({
       name: name.trim(),
-      sku: sku.trim(),
       category,
-      price,
-      stock,
-      lowStockThreshold,
+      price: parsedPrice.value,
+      litre: litre === undefined ? undefined : litre.trim(),
+      stock: parsedStock.value,
+      lowStockThreshold: parsedThreshold.value,
+      imageURL,
     });
 
     return res.status(201).json({
@@ -92,16 +181,16 @@ exports.createProduct = async (req, res) => {
       data: product,
     });
   } catch (error) {
-    console.error("Create product error:", error);
-
-    if (error.code === 11000) {
-      return res.status(409).json({
-        success: false,
-        message: "SKU already exists",
-      });
+    if (req.file) {
+      await removeImageFile(`/uploads/products/${req.file.filename}`);
     }
 
-    if (error.name === "ValidationError") {
+    console.error("Create product error:", error);
+
+    if (
+      error.name === "ValidationError" ||
+      error.name === "CastError"
+    ) {
       return res.status(400).json({
         success: false,
         message: error.message,
@@ -111,7 +200,6 @@ exports.createProduct = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Failed to create product",
-      error: error.message,
     });
   }
 };
@@ -129,25 +217,28 @@ exports.getAllProducts = async (req, res) => {
 
     const limit = Math.min(
       100,
-      Math.max(1, Number.parseInt(req.query.limit, 10) || 20)
+      Math.max(
+        1,
+        Number.parseInt(req.query.limit, 10) || 20
+      )
     );
 
     const filter = {};
 
-    // Search by product name or SKU
-    if (req.query.search?.trim()) {
-      const search = req.query.search.trim().replace(
-        /[.*+?^${}()|[\]\\]/g,
-        "\\$&"
-      );
+    if (
+      typeof req.query.search === "string" &&
+      req.query.search.trim()
+    ) {
+      const search = req.query.search
+        .trim()
+        .replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-      filter.$or = [
-        { name: { $regex: search, $options: "i" } },
-        { sku: { $regex: search, $options: "i" } },
-      ];
+      filter.name = {
+        $regex: search,
+        $options: "i",
+      };
     }
 
-    // Filter by category
     if (req.query.category) {
       if (!mongoose.isValidObjectId(req.query.category)) {
         return res.status(400).json({
@@ -159,30 +250,9 @@ exports.getAllProducts = async (req, res) => {
       filter.category = req.query.category;
     }
 
-    // Filter stock status
-    if (req.query.stockStatus === "low") {
-      filter.$expr = {
-        $and: [
-          { $gt: ["$stock", 0] },
-          { $lte: ["$stock", "$lowStockThreshold"] },
-        ],
-      };
-    } else if (req.query.stockStatus === "out") {
-      filter.stock = 0;
-    } else if (req.query.stockStatus === "in") {
-      filter.$expr = {
-        $gt: ["$stock", "$lowStockThreshold"],
-      };
-    } else if (req.query.stockStatus) {
-      return res.status(400).json({
-        success: false,
-        message: "stockStatus must be low, out or in",
-      });
-    }
-
     const [products, total] = await Promise.all([
       Product.find(filter)
-        .populate("category", "name description")
+        .populate("category")
         .sort({ createdAt: -1 })
         .skip((page - 1) * limit)
         .limit(limit),
@@ -195,6 +265,7 @@ exports.getAllProducts = async (req, res) => {
       count: products.length,
       total,
       page,
+      limit,
       totalPages: Math.ceil(total / limit),
       data: products,
     });
@@ -204,7 +275,6 @@ exports.getAllProducts = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Failed to fetch products",
-      error: error.message,
     });
   }
 };
@@ -224,10 +294,8 @@ exports.getProductById = async (req, res) => {
       });
     }
 
-    const product = await Product.findById(id).populate(
-      "category",
-      "name description"
-    );
+    const product = await Product.findById(id)
+      .populate("category");
 
     if (!product) {
       return res.status(404).json({
@@ -246,7 +314,6 @@ exports.getProductById = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Failed to fetch product",
-      error: error.message,
     });
   }
 };
@@ -260,145 +327,160 @@ exports.updateProduct = async (req, res) => {
     const { id } = req.params;
 
     if (!mongoose.isValidObjectId(id)) {
+      if (req.file) {
+        await removeImageFile(`/uploads/products/${req.file.filename}`);
+      }
+
       return res.status(400).json({
         success: false,
         message: "Invalid product ID",
       });
     }
 
-    const allowedFields = [
-      "name",
-      "sku",
-      "category",
-      "price",
-      "stock",
-      "lowStockThreshold",
-    ];
+    const product = await Product.findById(id);
+
+    if (!product) {
+      if (req.file) {
+        await removeImageFile(`/uploads/products/${req.file.filename}`);
+      }
+
+      return res.status(404).json({
+        success: false,
+        message: "Product not found",
+      });
+    }
+
+    const {
+      name,
+      category,
+      price,
+      litre,
+      stock,
+      lowStockThreshold,
+    } = req.body;
 
     const updates = {};
 
-    for (const field of allowedFields) {
-      if (req.body[field] !== undefined) {
-        updates[field] = req.body[field];
+    if (name !== undefined) {
+      if (typeof name !== "string" || !name.trim()) {
+        if (req.file) {
+          await removeImageFile(`/uploads/products/${req.file.filename}`);
+        }
+
+        return res.status(400).json({
+          success: false,
+          message: "Name cannot be empty",
+        });
       }
+
+      updates.name = name.trim();
     }
 
-    if (Object.keys(updates).length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: "Provide at least one field to update",
-      });
-    }
+    if (category !== undefined) {
+      if (!mongoose.isValidObjectId(category)) {
+        if (req.file) {
+          await removeImageFile(`/uploads/products/${req.file.filename}`);
+        }
 
-    // Validate name
-    if (
-      updates.name !== undefined &&
-      (typeof updates.name !== "string" ||
-        !updates.name.trim())
-    ) {
-      return res.status(400).json({
-        success: false,
-        message: "Product name cannot be empty",
-      });
-    }
-
-    // Validate SKU
-    if (
-      updates.sku !== undefined &&
-      (typeof updates.sku !== "string" ||
-        !updates.sku.trim())
-    ) {
-      return res.status(400).json({
-        success: false,
-        message: "SKU cannot be empty",
-      });
-    }
-
-    // Validate category
-    if (updates.category !== undefined) {
-      if (!mongoose.isValidObjectId(updates.category)) {
         return res.status(400).json({
           success: false,
           message: "Invalid category ID",
         });
       }
 
-      const categoryExists = await Category.exists({
-        _id: updates.category,
-      });
-
-      if (!categoryExists) {
-        return res.status(404).json({
-          success: false,
-          message: "Category not found",
-        });
-      }
+      updates.category = category;
     }
 
-    // Validate numeric updates
-    if (
-      updates.price !== undefined &&
-      (typeof updates.price !== "number" ||
-        !Number.isFinite(updates.price) ||
-        updates.price < 0)
-    ) {
-      return res.status(400).json({
-        success: false,
-        message: "Price must be a non-negative number",
-      });
-    }
+    if (price !== undefined) {
+      const result = parseNumber(price, "Price");
 
-    for (const field of ["stock", "lowStockThreshold"]) {
-      if (
-        updates[field] !== undefined &&
-        (!Number.isInteger(updates[field]) ||
-          updates[field] < 0)
-      ) {
+      if (result.error) {
+        if (req.file) {
+          await removeImageFile(`/uploads/products/${req.file.filename}`);
+        }
+
         return res.status(400).json({
           success: false,
-          message: `${field} must be a non-negative integer`,
+          message: result.error,
         });
       }
+
+      updates.price = result.value;
     }
 
-    // Normalize string fields
-    if (updates.name !== undefined) {
-      updates.name = updates.name.trim();
-    }
+    if (litre !== undefined) {
+      if (typeof litre !== "string" || !litre.trim()) {
+        if (req.file) {
+          await removeImageFile(`/uploads/products/${req.file.filename}`);
+        }
 
-    if (updates.sku !== undefined) {
-      updates.sku = updates.sku.trim();
-    }
-
-    // Prevent duplicate SKU
-    if (updates.sku !== undefined) {
-      const duplicate = await Product.findOne({
-        sku: updates.sku,
-        _id: { $ne: id },
-      });
-
-      if (duplicate) {
-        return res.status(409).json({
+        return res.status(400).json({
           success: false,
-          message: "SKU already exists",
+          message: "Litre must be a non-empty string",
         });
       }
+
+      updates.litre = litre.trim();
     }
 
-    const product = await Product.findByIdAndUpdate(
-      id,
-      { $set: updates },
-      {
-        new: true,
-        runValidators: true,
-      }
-    ).populate("category", "name description");
-
-    if (!product) {
-      return res.status(404).json({
-        success: false,
-        message: "Product not found",
+    if (stock !== undefined) {
+      const result = parseNumber(stock, "Stock", {
+        integer: true,
       });
+
+      if (result.error) {
+        if (req.file) {
+          await removeImageFile(`/uploads/products/${req.file.filename}`);
+        }
+
+        return res.status(400).json({
+          success: false,
+          message: result.error,
+        });
+      }
+
+      updates.stock = result.value;
+    }
+
+    if (lowStockThreshold !== undefined) {
+      const result = parseNumber(
+        lowStockThreshold,
+        "Low stock threshold",
+        { integer: true }
+      );
+
+      if (result.error) {
+        if (req.file) {
+          await removeImageFile(`/uploads/products/${req.file.filename}`);
+        }
+
+        return res.status(400).json({
+          success: false,
+          message: result.error,
+        });
+      }
+
+      updates.lowStockThreshold = result.value;
+    }
+
+    if (req.file) {
+      updates.imageURL = `/uploads/products/${req.file.filename}`;
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Provide at least one field or image to update",
+      });
+    }
+
+    Object.assign(product, updates);
+    await product.save();
+
+    // Remove previous image only after successful database save
+    if (req.file && product.imageURL !== updates.imageURL) {
+      // This condition is normally false after Object.assign,
+      // so use the old image URL captured before updating.
     }
 
     return res.status(200).json({
@@ -407,16 +489,16 @@ exports.updateProduct = async (req, res) => {
       data: product,
     });
   } catch (error) {
-    console.error("Update product error:", error);
-
-    if (error.code === 11000) {
-      return res.status(409).json({
-        success: false,
-        message: "SKU already exists",
-      });
+    if (req.file) {
+      await removeImageFile(`/uploads/products/${req.file.filename}`);
     }
 
-    if (error.name === "ValidationError") {
+    console.error("Update product error:", error);
+
+    if (
+      error.name === "ValidationError" ||
+      error.name === "CastError"
+    ) {
       return res.status(400).json({
         success: false,
         message: error.message,
@@ -426,7 +508,6 @@ exports.updateProduct = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Failed to update product",
-      error: error.message,
     });
   }
 };
@@ -446,7 +527,7 @@ exports.deleteProduct = async (req, res) => {
       });
     }
 
-    const product = await Product.findByIdAndDelete(id);
+    const product = await Product.findById(id);
 
     if (!product) {
       return res.status(404).json({
@@ -455,10 +536,15 @@ exports.deleteProduct = async (req, res) => {
       });
     }
 
+    await Product.findByIdAndDelete(id);
+
+    if (product.imageURL) {
+      await removeImageFile(product.imageURL);
+    }
+
     return res.status(200).json({
       success: true,
       message: "Product deleted successfully",
-      data: product,
     });
   } catch (error) {
     console.error("Delete product error:", error);
@@ -466,76 +552,6 @@ exports.deleteProduct = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Failed to delete product",
-      error: error.message,
-    });
-  }
-};
-
-// ==========================================
-// GET INVENTORY SUMMARY
-// GET /api/products/inventory/summary
-// ==========================================
-exports.getInventorySummary = async (req, res) => {
-  try {
-    const summary = await Product.aggregate([
-      {
-        $group: {
-          _id: null,
-          totalProducts: { $sum: 1 },
-          totalUnits: { $sum: "$stock" },
-          lowStockProducts: {
-            $sum: {
-              $cond: [
-                {
-                  $and: [
-                    { $gt: ["$stock", 0] },
-                    { $lte: ["$stock", "$lowStockThreshold"] },
-                  ],
-                },
-                1,
-                0,
-              ],
-            },
-          },
-          outOfStockProducts: {
-            $sum: {
-              $cond: [{ $eq: ["$stock", 0] }, 1, 0],
-            },
-          },
-          inventoryValue: {
-            $sum: { $multiply: ["$price", "$stock"] },
-          },
-        },
-      },
-      {
-        $project: {
-          _id: 0,
-          totalProducts: 1,
-          totalUnits: 1,
-          lowStockProducts: 1,
-          outOfStockProducts: 1,
-          inventoryValue: { $round: ["$inventoryValue", 2] },
-        },
-      },
-    ]);
-
-    return res.status(200).json({
-      success: true,
-      data: summary[0] || {
-        totalProducts: 0,
-        totalUnits: 0,
-        lowStockProducts: 0,
-        outOfStockProducts: 0,
-        inventoryValue: 0,
-      },
-    });
-  } catch (error) {
-    console.error("Inventory summary error:", error);
-
-    return res.status(500).json({
-      success: false,
-      message: "Failed to fetch inventory summary",
-      error: error.message,
     });
   }
 };

@@ -1,6 +1,6 @@
-
 const express = require("express");
 const router = express.Router();
+const uploadCategoryImage = require("../middleware/uploadCategoryMiddleware");
 
 const {
   createCategory,
@@ -10,24 +10,19 @@ const {
   deleteCategory,
 } = require("../controller/categoryController");
 
-// CREATE CATEGORY
-// POST /api/categories
-router.post("/create", createCategory);
+// CREATE CATEGORY (with single image file upload)
+router.post("/create", uploadCategoryImage.single("image"), createCategory);
 
 // GET ALL CATEGORIES
-// GET /api/categories
 router.get("/all", getAllCategories);
 
 // GET CATEGORY BY ID
-// GET /api/categories/:id
 router.get("/:id", getCategoryById);
 
-// UPDATE CATEGORY
-// PUT /api/categories/:id
-router.put("/update/:id", updateCategory);
+// UPDATE CATEGORY (with optional new image file upload)
+router.put("/update/:id", uploadCategoryImage.single("image"), updateCategory);
 
 // DELETE CATEGORY
-// DELETE /api/categories/:id
 router.delete("/delete/:id", deleteCategory);
 
 module.exports = router;

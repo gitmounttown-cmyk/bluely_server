@@ -2,7 +2,7 @@
 const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
 const User = require("../model/userModel");
-
+const jwt = require("jsonwebtoken");
 // Allowed roles
 const ALLOWED_ROLES = [
   "Admin",
@@ -113,6 +113,114 @@ exports.createUser = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Failed to create user",
+    });
+  }
+};
+
+
+
+// ==========================================
+// LOGIN USER
+// POST /api/auth/login
+// ==========================================
+exports.loginUser = async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    // Validate required fields
+    if (
+      typeof email !== "string" ||
+      !email.trim() ||
+      typeof password !== "string" ||
+      !password
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Email and password are required",
+      });
+    }
+
+    // Normalize email
+    const normalizedEmail = email.trim().toLowerCase();
+
+    // Find user by email
+    const user = await User.findOne({
+      email: normalizedEmail,
+    });
+
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid email or password",
+      });
+    }
+
+    // Compare entered password with stored password hash
+    const isPasswordValid = await bcrypt.compare(
+      password,
+      user.password
+    );
+
+    if (!isPasswordValid) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid email or password",
+      });
+    }
+
+    // Check whether the role is allowed
+    const allowedRoles = [
+      "Admin",
+      "Cashier",
+      "Inventory Manager",
+    ];
+
+    if (!allowedRoles.includes(user.role)) {
+      return res.status(403).json({
+        success: false,
+        message: "Your role is not authorized to log in",
+      });
+    }
+
+    // Ensure JWT secret is configured
+    if (!process.env.JWT_SECRET) {
+      console.error("JWT_SECRET is missing in environment variables");
+
+      return res.status(500).json({
+        success: false,
+        message: "Authentication configuration error",
+      });
+    }
+
+    // Generate JWT token
+    const token = jwt.sign(
+      {
+        id: user._id.toString(),
+        role: user.role,
+        email: user.email,
+      },
+      process.env.JWT_SECRET,
+      {
+        expiresIn: "1d",
+      }
+    );
+
+    // Return safe user details
+    const safeUser = user.toObject();
+    delete safeUser.password;
+
+    return res.status(200).json({
+      success: true,
+      message: "Login successful",
+      token,
+      data: safeUser,
+    });
+  } catch (error) {
+    console.error("Login error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to log in",
     });
   }
 };

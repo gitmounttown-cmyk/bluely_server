@@ -8,11 +8,13 @@ const {
   getUserById,
   updateUser,
   deleteUser,
+  loginUser,
 } = require("../controller/authController");
 
 // Create user
 router.post("/create", createUser);
 
+router.post("/login",loginUser)
 // Get all users
 router.get("/all", getAllUsers);
 

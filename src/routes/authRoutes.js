@@ -12,7 +12,7 @@ const {
 } = require("../controller/authController");
 
 // Create user
-router.post("/create", createUser);
+router.post("/signup", createUser);
 
 router.post("/login",loginUser)
 // Get all users

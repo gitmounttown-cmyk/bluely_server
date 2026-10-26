@@ -1,4 +1,3 @@
-
 const Category = require("../model/categortModel");
 
 // =====================================
@@ -6,7 +5,7 @@ const Category = require("../model/categortModel");
 // =====================================
 exports.createCategory = async (req, res) => {
   try {
-    const { name, description, imageURL } = req.body;
+    const { name, description } = req.body;
 
     // Validate required field
     if (!name || !name.trim()) {
@@ -28,6 +27,12 @@ exports.createCategory = async (req, res) => {
       });
     }
 
+    // Determine image URL from uploaded file or text input
+    let imageURL = req.body.imageURL || "";
+    if (req.file) {
+      imageURL = `/uploads/categories/${req.file.filename}`;
+    }
+
     const category = await Category.create({
       name: name.trim(),
       description,
@@ -42,7 +47,6 @@ exports.createCategory = async (req, res) => {
   } catch (error) {
     console.error("Create category error:", error);
 
-    // Handle MongoDB duplicate key error
     if (error.code === 11000) {
       return res.status(409).json({
         success: false,
@@ -63,8 +67,7 @@ exports.createCategory = async (req, res) => {
 // =====================================
 exports.getAllCategories = async (req, res) => {
   try {
-    const categories = await Category.find()
-      .sort({ createdAt: -1 });
+    const categories = await Category.find().sort({ createdAt: -1 });
 
     return res.status(200).json({
       success: true,
@@ -73,7 +76,6 @@ exports.getAllCategories = async (req, res) => {
     });
   } catch (error) {
     console.error("Get categories error:", error);
-
     return res.status(500).json({
       success: false,
       message: "Failed to fetch categories",
@@ -111,7 +113,6 @@ exports.getCategoryById = async (req, res) => {
     });
   } catch (error) {
     console.error("Get category error:", error);
-
     return res.status(500).json({
       success: false,
       message: "Failed to fetch category",
@@ -135,7 +136,6 @@ exports.updateCategory = async (req, res) => {
       });
     }
 
-    // Ensure the category exists
     const category = await Category.findById(id);
 
     if (!category) {
@@ -145,7 +145,6 @@ exports.updateCategory = async (req, res) => {
       });
     }
 
-    // Validate name if supplied
     if (name !== undefined) {
       if (typeof name !== "string" || !name.trim()) {
         return res.status(400).json({
@@ -169,12 +168,14 @@ exports.updateCategory = async (req, res) => {
       category.name = name.trim();
     }
 
-    // Update only fields provided in the request
     if (description !== undefined) {
       category.description = description;
     }
 
-    if (imageURL !== undefined) {
+    // Handle new uploaded file or explicit string URL update
+    if (req.file) {
+      category.imageURL = `/uploads/categories/${req.file.filename}`;
+    } else if (imageURL !== undefined) {
       category.imageURL = imageURL;
     }
 
@@ -233,7 +234,6 @@ exports.deleteCategory = async (req, res) => {
     });
   } catch (error) {
     console.error("Delete category error:", error);
-
     return res.status(500).json({
       success: false,
       message: "Failed to delete category",

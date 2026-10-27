@@ -46,6 +46,7 @@ app.use("/api/categories", require("./src/routes/categoryRoutes"));
 app.use("/api/product", require("./src/routes/productRoutes"));
 app.use("/api/order", require("./src/routes/orderRoutes"));
 app.use('/api/dealers',require("./src/routes/dealerRoutes"));
+app.use("/api/dashboard",require("./src/routes/dashboardRoutes"));
 // ==========================================================
 // 404 HANDLER
 // ==========================================================

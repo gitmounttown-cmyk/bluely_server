@@ -1,4 +1,3 @@
-
 const mongoose = require("mongoose");
 
 const orderItemSchema = new mongoose.Schema(
@@ -38,6 +37,14 @@ const orderSchema = new mongoose.Schema(
       required: true,
       unique: true,
       trim: true,
+      default: () => `ORD-${Date.now().toString().slice(-6)}-${Math.floor(100 + Math.random() * 900)}`,
+    },
+
+    // Linked user reference for website customer profile order histories (optional for POS walk-ins)
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
     },
 
     customerName: {
@@ -46,11 +53,17 @@ const orderSchema = new mongoose.Schema(
       trim: true,
     },
 
+    customerEmail: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+
     items: {
       type: [orderItemSchema],
       required: true,
       validate: {
-        validator: (items) => items.length > 0,
+        validator: (items) => Array.isArray(items) && items.length > 0,
         message: "An order must contain at least one item",
       },
     },
@@ -58,6 +71,7 @@ const orderSchema = new mongoose.Schema(
     subtotal: {
       type: Number,
       required: true,
+      default: 0,
       min: 0,
     },
 
@@ -70,18 +84,21 @@ const orderSchema = new mongoose.Schema(
     tax: {
       type: Number,
       required: true,
+      default: 0,
       min: 0,
     },
 
     totalAmount: {
       type: Number,
       required: true,
+      default: 0,
       min: 0,
     },
 
     paymentMethod: {
       type: String,
-      enum: ["Cash", "UPI", "Card"],
+      enum: ["Cash", "UPI", "Card", "Online", "Razorpay"],
+      default: "Cash",
       required: true,
     },
 
@@ -92,7 +109,14 @@ const orderSchema = new mongoose.Schema(
         "Processing",
         "Pending",
         "Cancelled",
+        "Success",
+        "Refunded"
       ],
+      default: "Pending",
+    },
+
+    orderStatus: {
+      type: String,
       default: "Pending",
     },
 

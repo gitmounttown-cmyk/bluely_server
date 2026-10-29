@@ -1,6 +1,6 @@
-
 const express = require("express");
 const router = express.Router();
+const { verifyToken } = require("../middleware/authMiddleware");
 
 const {
   createUser,
@@ -9,22 +9,25 @@ const {
   updateUser,
   deleteUser,
   loginUser,
+  forgotPassword,
+  verifyOtp,
+  resetPassword,
+  getMe,
 } = require("../controller/authController");
 
-// Create user
+// Authentication Routes matching frontend requests
 router.post("/signup", createUser);
+router.post("/register", createUser); // Aliased for website registration
+router.post("/login", loginUser);
+router.post("/forgot-password", forgotPassword);
+router.post("/verify-otp", verifyOtp);
+router.post("/reset-password", resetPassword);
+router.get("/me", verifyToken, getMe);
 
-router.post("/login",loginUser)
-// Get all users
+// User Management Routes
 router.get("/all", getAllUsers);
-
-// Get user by ID
 router.get("/:id", getUserById);
-
-// Update user
 router.put("/update/:id", updateUser);
-
-// Delete user
 router.delete("/delete/:id", deleteUser);
 
 module.exports = router;

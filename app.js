@@ -12,9 +12,8 @@ app.use(express.urlencoded({ extended: true }));
 // ==========================================================
 app.use(
   cors({
-    // origin: 'http://localhost:5173',
-    // origin: 'https://hazelcart.com',
-    // credentials: true,
+    origin: true,
+    credentials: true,
   })
 );
 
@@ -40,13 +39,32 @@ app.get('/', (req, res) => {
   });
 });
 
-// FIXED: Mounted authRoutes to /api/auth to match frontend requests (/api/auth/login)
+// Mounted routes
 app.use("/api/auth", require("./src/routes/authRoutes"));
+app.use("/api/users", require("./src/routes/authRoutes"));
 app.use("/api/categories", require("./src/routes/categoryRoutes"));
 app.use("/api/product", require("./src/routes/productRoutes"));
+app.use("/api/products", require("./src/routes/productRoutes")); // Alias for plural requests
 app.use("/api/order", require("./src/routes/orderRoutes"));
-app.use('/api/dealers',require("./src/routes/dealerRoutes"));
-app.use("/api/dashboard",require("./src/routes/dashboardRoutes"));
+app.use("/api/orders", require("./src/routes/orderRoutes")); // Alias for plural requests
+app.use("/api/dealers", require("./src/routes/dealerRoutes"));
+app.use("/api/dashboard", require("./src/routes/dashboardRoutes"));
+app.use("/api/wishlist", require("./src/routes/wishListRoutes"));
+app.use("/api/why-choose-us", require("./src/routes/whyChooseUsRoutes"));
+app.use("/api/addresses", require("./src/routes/addressRoutes"));
+
+// Contact message endpoint
+app.post("/api/contact", (req, res) => {
+  console.log("Contact form submitted:", req.body);
+  res.status(200).json({ success: true, message: "Thank you for reaching out! We will contact you soon." });
+});
+
+// Payment create-order alias directly to order creation
+app.post("/api/payment/create-order", (req, res, next) => {
+  req.url = "/create";
+  return require("./src/routes/orderRoutes")(req, res, next);
+});
+
 // ==========================================================
 // 404 HANDLER
 // ==========================================================

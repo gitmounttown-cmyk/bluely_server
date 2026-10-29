@@ -1,13 +1,15 @@
-
 const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
 const User = require("../model/userModel");
 const jwt = require("jsonwebtoken");
+
 // Allowed roles
 const ALLOWED_ROLES = [
   "Admin",
   "Cashier",
   "Inventory Manager",
+  "Customer",
+  "User",
 ];
 
 // ==========================================
@@ -53,7 +55,7 @@ exports.createUser = async (req, res) => {
     }
 
     // Validate role
-    const userRole = role || "Cashier";
+    const userRole = role || "Customer";
 
     if (!ALLOWED_ROLES.includes(userRole)) {
       return res.status(400).json({
@@ -91,6 +93,7 @@ exports.createUser = async (req, res) => {
     return res.status(201).json({
       success: true,
       message: "User created successfully",
+      user: safeUser,
       data: safeUser,
     });
   } catch (error) {
@@ -116,8 +119,6 @@ exports.createUser = async (req, res) => {
     });
   }
 };
-
-
 
 // ==========================================
 // LOGIN USER
@@ -173,6 +174,8 @@ exports.loginUser = async (req, res) => {
       "Admin",
       "Cashier",
       "Inventory Manager",
+  "Customer",
+  "User",
     ];
 
     if (!allowedRoles.includes(user.role)) {
@@ -213,6 +216,7 @@ exports.loginUser = async (req, res) => {
       success: true,
       message: "Login successful",
       token,
+      user: safeUser,
       data: safeUser,
     });
   } catch (error) {
@@ -221,6 +225,182 @@ exports.loginUser = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Failed to log in",
+    });
+  }
+};
+
+// ==========================================
+// FORGOT PASSWORD (Generate & Send OTP)
+// POST /api/auth/forgot-password
+// ==========================================
+exports.forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (typeof email !== "string" || !email.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "Email is required",
+      });
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+    const user = await User.findOne({ email: normalizedEmail });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User with this email does not exist",
+      });
+    }
+
+    // Generate a 6-digit OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    
+    user.resetPasswordOtp = otp;
+    user.resetPasswordExpires = Date.now() + 10 * 60 * 1000; // 10 minutes expiry
+    await user.save();
+
+    // TODO: Integrate your mailing system (e.g., Nodemailer, SendGrid) to email the OTP.
+    console.log(`[DEV] Password Reset OTP for ${normalizedEmail}: ${otp}`);
+
+    return res.status(200).json({
+      success: true,
+      message: "OTP sent successfully to your email",
+    });
+  } catch (error) {
+    console.error("Forgot password error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to process forgot password request",
+    });
+  }
+};
+
+// ==========================================
+// VERIFY OTP
+// POST /api/auth/verify-otp
+// ==========================================
+exports.verifyOtp = async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+
+    if (!email || !otp) {
+      return res.status(400).json({
+        success: false,
+        message: "Email and OTP are required",
+      });
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+    const user = await User.findOne({
+      email: normalizedEmail,
+      resetPasswordOtp: otp,
+      resetPasswordExpires: { $gt: Date.now() },
+    });
+
+    if (!user) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid or expired OTP",
+      });
+    }
+
+    // Clear OTP details so they cannot be reused
+    user.resetPasswordOtp = undefined;
+    user.resetPasswordExpires = undefined;
+    await user.save();
+
+    if (!process.env.JWT_SECRET) {
+      return res.status(500).json({
+        success: false,
+        message: "Authentication configuration error",
+      });
+    }
+
+    // Issue a short-lived reset token (15 mins) to use as Bearer token for password reset
+    const resetToken = jwt.sign(
+      { id: user._id.toString(), purpose: "password-reset" },
+      process.env.JWT_SECRET,
+      { expiresIn: "15m" }
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "OTP verified successfully",
+      resetToken,
+    });
+  } catch (error) {
+    console.error("Verify OTP error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to verify OTP",
+    });
+  }
+};
+
+// ==========================================
+// RESET PASSWORD
+// POST /api/auth/reset-password
+// ==========================================
+exports.resetPassword = async (req, res) => {
+  try {
+    const { newPassword } = req.body;
+    const authHeader = req.headers.authorization;
+
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({
+        success: false,
+        message: "Authorization token missing or malformed",
+      });
+    }
+
+    if (!newPassword || newPassword.length < 8) {
+      return res.status(400).json({
+        success: false,
+        message: "New password must contain at least 8 characters",
+      });
+    }
+
+    const resetToken = authHeader.split(" ")[1];
+
+    let decoded;
+    try {
+      decoded = jwt.verify(resetToken, process.env.JWT_SECRET);
+    } catch (err) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid or expired reset token",
+      });
+    }
+
+    if (decoded.purpose !== "password-reset") {
+      return res.status(403).json({
+        success: false,
+        message: "Invalid token purpose",
+      });
+    }
+
+    const user = await User.findById(decoded.id);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    user.password = await bcrypt.hash(newPassword, 12);
+    await user.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Password reset successfully. You can now log in with your new password.",
+    });
+  } catch (error) {
+    console.error("Reset password error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to reset password",
     });
   }
 };
@@ -243,7 +423,6 @@ exports.getAllUsers = async (req, res) => {
 
     const filter = {};
 
-    // Optional role filter
     if (req.query.role) {
       if (!ALLOWED_ROLES.includes(req.query.role)) {
         return res.status(400).json({
@@ -255,7 +434,6 @@ exports.getAllUsers = async (req, res) => {
       filter.role = req.query.role;
     }
 
-    // Optional name/email search
     if (req.query.search?.trim()) {
       const search = req.query.search.trim().replace(
         /[.*+?^${}()|[\]\\]/g,
@@ -406,7 +584,6 @@ exports.updateUser = async (req, res) => {
       updates.role = role;
     }
 
-    // Hash a new password if supplied
     if (password !== undefined) {
       if (typeof password !== "string" || password.length < 8) {
         return res.status(400).json({
@@ -507,3 +684,28 @@ exports.deleteUser = async (req, res) => {
     });
   }
 };
+
+// ==========================================
+// GET CURRENT LOGGED IN USER (/api/auth/me)
+// ==========================================
+exports.getMe = async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id).select('-password');
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found',
+      });
+    }
+    return res.status(200).json({
+      success: true,
+      data: user,
+      user,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to fetch profile',
+    });
+  }
+}

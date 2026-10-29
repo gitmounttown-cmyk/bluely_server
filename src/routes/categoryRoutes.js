@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const uploadCategoryImage = require("../middleware/uploadCategoryMiddleware");
+const { verifyToken, verifyTokenOptional, allowRoles } = require("../middleware/authMiddleware");
 
 const {
   createCategory,
@@ -10,19 +11,13 @@ const {
   deleteCategory,
 } = require("../controller/categoryController");
 
-// CREATE CATEGORY (with single image file upload)
-router.post("/create", uploadCategoryImage.single("image"), createCategory);
+// Public browsing for website visitors
+router.get("/all", verifyTokenOptional, getAllCategories);
+router.get("/:id", verifyTokenOptional, getCategoryById);
 
-// GET ALL CATEGORIES
-router.get("/all", getAllCategories);
-
-// GET CATEGORY BY ID
-router.get("/:id", getCategoryById);
-
-// UPDATE CATEGORY (with optional new image file upload)
-router.put("/update/:id", uploadCategoryImage.single("image"), updateCategory);
-
-// DELETE CATEGORY
-router.delete("/delete/:id", deleteCategory);
+// Admin-only management
+router.post("/create", verifyToken, allowRoles("Admin"), uploadCategoryImage.single("image"), createCategory);
+router.put("/update/:id", verifyToken, allowRoles("Admin"), uploadCategoryImage.single("image"), updateCategory);
+router.delete("/delete/:id", verifyToken, allowRoles("Admin"), deleteCategory);
 
 module.exports = router;

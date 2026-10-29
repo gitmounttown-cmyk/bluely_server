@@ -1,243 +1,71 @@
 const Category = require("../model/categortModel");
 
-// =====================================
-// CREATE CATEGORY
-// =====================================
-exports.createCategory = async (req, res) => {
+const getAllCategories = async (req, res) => {
   try {
-    const { name, description } = req.body;
+    const categories = await Category.find({}).sort({ createdAt: -1 });
+    res.status(200).json(categories);
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
 
-    // Validate required field
-    if (!name || !name.trim()) {
-      return res.status(400).json({
-        success: false,
-        message: "Category name is required",
-      });
-    }
+const getCategoryById = async (req, res) => {
+  try {
+    const category = await Category.findById(req.params.id);
+    if (!category) return res.status(404).json({ success: false, message: "Category not found" });
+    res.status(200).json(category);
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
 
-    // Check duplicate category name
-    const existingCategory = await Category.findOne({
-      name: name.trim(),
-    });
-
-    if (existingCategory) {
-      return res.status(409).json({
-        success: false,
-        message: "Category already exists",
-      });
-    }
-
-    // Determine image URL from uploaded file or text input
-    let imageURL = req.body.imageURL || "";
+const createCategory = async (req, res) => {
+  try {
+    const data = { ...req.body };
     if (req.file) {
-      imageURL = `/uploads/categories/${req.file.filename}`;
+      const imgPath = `/uploads/categories/${req.file.filename}`;
+      data.image = imgPath;
+      data.imageURL = imgPath;
     }
-
-    const category = await Category.create({
-      name: name.trim(),
-      description,
-      imageURL,
-    });
-
-    return res.status(201).json({
-      success: true,
-      message: "Category created successfully",
-      data: category,
-    });
+    const category = await Category.create(data);
+    res.status(201).json(category);
   } catch (error) {
     console.error("Create category error:", error);
-
-    if (error.code === 11000) {
-      return res.status(409).json({
-        success: false,
-        message: "Category name already exists",
-      });
-    }
-
-    return res.status(500).json({
-      success: false,
-      message: "Internal server error",
-      error: error.message,
-    });
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// =====================================
-// GET ALL CATEGORIES
-// =====================================
-exports.getAllCategories = async (req, res) => {
+const updateCategory = async (req, res) => {
   try {
-    const categories = await Category.find().sort({ createdAt: -1 });
-
-    return res.status(200).json({
-      success: true,
-      count: categories.length,
-      data: categories,
-    });
-  } catch (error) {
-    console.error("Get categories error:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Failed to fetch categories",
-      error: error.message,
-    });
-  }
-};
-
-// =====================================
-// GET CATEGORY BY ID
-// =====================================
-exports.getCategoryById = async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    if (!id || !/^[a-fA-F0-9]{24}$/.test(id)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid category ID",
-      });
-    }
-
-    const category = await Category.findById(id);
-
-    if (!category) {
-      return res.status(404).json({
-        success: false,
-        message: "Category not found",
-      });
-    }
-
-    return res.status(200).json({
-      success: true,
-      data: category,
-    });
-  } catch (error) {
-    console.error("Get category error:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Failed to fetch category",
-      error: error.message,
-    });
-  }
-};
-
-// =====================================
-// UPDATE CATEGORY
-// =====================================
-exports.updateCategory = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { name, description, imageURL } = req.body;
-
-    if (!/^[a-fA-F0-9]{24}$/.test(id)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid category ID",
-      });
-    }
-
-    const category = await Category.findById(id);
-
-    if (!category) {
-      return res.status(404).json({
-        success: false,
-        message: "Category not found",
-      });
-    }
-
-    if (name !== undefined) {
-      if (typeof name !== "string" || !name.trim()) {
-        return res.status(400).json({
-          success: false,
-          message: "Category name cannot be empty",
-        });
-      }
-
-      const duplicate = await Category.findOne({
-        name: name.trim(),
-        _id: { $ne: id },
-      });
-
-      if (duplicate) {
-        return res.status(409).json({
-          success: false,
-          message: "Another category already uses this name",
-        });
-      }
-
-      category.name = name.trim();
-    }
-
-    if (description !== undefined) {
-      category.description = description;
-    }
-
-    // Handle new uploaded file or explicit string URL update
+    const data = { ...req.body };
     if (req.file) {
-      category.imageURL = `/uploads/categories/${req.file.filename}`;
-    } else if (imageURL !== undefined) {
-      category.imageURL = imageURL;
+      const imgPath = `/uploads/categories/${req.file.filename}`;
+      data.image = imgPath;
+      data.imageURL = imgPath;
     }
-
-    await category.save();
-
-    return res.status(200).json({
-      success: true,
-      message: "Category updated successfully",
-      data: category,
-    });
+    const category = await Category.findByIdAndUpdate(req.params.id, data, { new: true });
+    if (!category) return res.status(404).json({ success: false, message: "Category not found" });
+    res.status(200).json(category);
   } catch (error) {
     console.error("Update category error:", error);
-
-    if (error.code === 11000) {
-      return res.status(409).json({
-        success: false,
-        message: "Category name already exists",
-      });
-    }
-
-    return res.status(500).json({
-      success: false,
-      message: "Failed to update category",
-      error: error.message,
-    });
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// =====================================
-// DELETE CATEGORY
-// =====================================
-exports.deleteCategory = async (req, res) => {
+const deleteCategory = async (req, res) => {
   try {
-    const { id } = req.params;
-
-    if (!/^[a-fA-F0-9]{24}$/.test(id)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid category ID",
-      });
-    }
-
-    const category = await Category.findByIdAndDelete(id);
-
-    if (!category) {
-      return res.status(404).json({
-        success: false,
-        message: "Category not found",
-      });
-    }
-
-    return res.status(200).json({
-      success: true,
-      message: "Category deleted successfully",
-      data: category,
-    });
+    const category = await Category.findByIdAndDelete(req.params.id);
+    if (!category) return res.status(404).json({ success: false, message: "Category not found" });
+    res.status(200).json({ success: true, message: "Category deleted successfully" });
   } catch (error) {
-    console.error("Delete category error:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Failed to delete category",
-      error: error.message,
-    });
+    res.status(500).json({ success: false, message: error.message });
   }
+};
+
+module.exports = {
+  createCategory,
+  getAllCategories,
+  getCategoryById,
+  updateCategory,
+  deleteCategory,
 };

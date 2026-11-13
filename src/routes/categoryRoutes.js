@@ -12,6 +12,7 @@ const {
 } = require("../controller/categoryController");
 
 // Public browsing for website visitors
+router.get("/", verifyTokenOptional, getAllCategories);
 router.get("/all", verifyTokenOptional, getAllCategories);
 router.get("/:id", verifyTokenOptional, getCategoryById);
 

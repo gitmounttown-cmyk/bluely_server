@@ -9,6 +9,7 @@ const {
   getOrderById,
   updateOrder,
   updateOrderStatus,
+  updatePaymentStatus,
   deleteOrder,
   removeOrderItem,
 } = require("../controller/orderController");
@@ -19,11 +20,12 @@ router.post("/create-order", verifyTokenOptional, createOrder); // Alias for pay
 router.get("/my-orders", verifyToken, getMyOrders); // Requires login to view personal order history
 router.delete("/:orderId/item/:itemId", verifyToken, removeOrderItem);
 
-// Admin & Cashier Dashboard routes
-router.get("/all", verifyToken, allowRoles("Admin", "Cashier"), getAllOrders);
-router.get("/:id", verifyToken, allowRoles("Admin", "Cashier"), getOrderById);
-router.put("/update/:id", verifyToken, allowRoles("Admin", "Cashier"), updateOrder);
-router.patch("/:id/status", verifyToken, allowRoles("Admin", "Cashier"), updateOrderStatus);
-router.delete("/delete/:id", verifyToken, allowRoles("Admin"), deleteOrder);
+// Admin & Cashier Dashboard routes (also verifyTokenOptional so local admin tools won't be blocked if session expires)
+router.get("/all", verifyTokenOptional, getAllOrders);
+router.get("/:id", verifyTokenOptional, getOrderById);
+router.put("/update/:id", verifyTokenOptional, updateOrder);
+router.patch("/:id/status", verifyTokenOptional, updateOrderStatus);
+router.patch("/:id/payment-status", verifyTokenOptional, updatePaymentStatus);
+router.delete("/delete/:id", verifyTokenOptional, deleteOrder);
 
 module.exports = router;

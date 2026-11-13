@@ -12,6 +12,7 @@ const {
 } = require("../controller/productController");
 
 // Public / Guest & Logged-in users can view products
+router.get("/", verifyTokenOptional, getAllProducts);
 router.get("/all", verifyTokenOptional, getAllProducts);
 router.get("/:id", verifyTokenOptional, getProductById);
 

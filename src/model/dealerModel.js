@@ -18,6 +18,23 @@ const dealerSchema = new mongoose.Schema(
     tradeLicense: { type: String, default: "" },
     cancelledCheque: { type: String, default: "" },
 
+    // Document Verification Flags (Checked OK by Admin)
+    verifiedDocs: {
+      aadhar: { type: Boolean, default: false },
+      pan: { type: Boolean, default: false },
+      gstin: { type: Boolean, default: false },
+      tradeLicense: { type: Boolean, default: false },
+      cancelledCheque: { type: Boolean, default: false },
+    },
+
+    adminNotes: { type: String, default: "" },
+
+    portalCredentials: {
+      username: { type: String, default: "" },
+      accessCode: { type: String, default: "" },
+      generatedAt: { type: Date, default: null },
+    },
+
     status: { 
       type: String, 
       enum: ["Pending Review", "Approved", "Rejected"], 

@@ -8,8 +8,10 @@ exports.getDashboardStats = async (req, res) => {
     // 1. Total Products Count
     const totalProducts = await Product.countDocuments();
 
-    // 2. Low Stock Count (Stock <= 10)
-    const lowStockCount = await Product.countDocuments({ stock: { $lte: 10 } });
+    // 2. Low Stock Count (Stock <= min_stock_level or 10)
+    const lowStockCount = await Product.countDocuments({
+      $expr: { $lte: ["$stock", { $ifNull: ["$min_stock_level", 10] }] }
+    });
 
     // 3. Total Customers Count
     const totalCustomers = await User.countDocuments();
@@ -200,11 +202,13 @@ exports.getDashboardStats = async (req, res) => {
       status: (item.stock ?? 0) === 0 ? "Out of Stock" : (item.stock ?? 0) <= 10 ? "Low Stock" : "In Stock",
     }));
 
-    // 8. Low Stock Items List
-    const lowStockItemsQuery = await Product.find({ stock: { $lte: 10 } })
+    // 8. Low Stock Items List (Products at or below min_stock_level)
+    const lowStockItemsQuery = await Product.find({
+      $expr: { $lte: ["$stock", { $ifNull: ["$min_stock_level", 10] }] }
+    })
       .populate("category", "name")
       .sort({ stock: 1 })
-      .limit(5)
+      .limit(10)
       .lean();
 
     const formattedLowStock = lowStockItemsQuery.map((item) => ({
@@ -214,6 +218,7 @@ exports.getDashboardStats = async (req, res) => {
       category: item.category?.name || item.categoryName || item.category || "General",
       litre: item.litre || "1L",
       stock: item.stock ?? 0,
+      minStockLevel: item.min_stock_level || 10,
       status: (item.stock ?? 0) === 0 ? "Out of Stock" : "Low Stock",
     }));
 

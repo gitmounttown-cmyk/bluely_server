@@ -48,6 +48,9 @@ app.use("/api/products", require("./src/routes/productRoutes")); // Alias for pl
 app.use("/api/order", require("./src/routes/orderRoutes"));
 app.use("/api/orders", require("./src/routes/orderRoutes")); // Alias for plural requests
 app.use("/api/dealers", require("./src/routes/dealerRoutes"));
+app.use("/api/customers", require("./src/routes/customerRoutes"));
+app.use("/api/gstin", require("./src/routes/gstinRoutes"));
+app.use("/api", require("./src/routes/purchaseInvoiceRoutes"));
 app.use("/api/dashboard", require("./src/routes/dashboardRoutes"));
 app.use("/api/wishlist", require("./src/routes/wishListRoutes"));
 app.use("/api/why-choose-us", require("./src/routes/whyChooseUsRoutes"));

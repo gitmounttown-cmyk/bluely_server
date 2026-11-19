@@ -18,7 +18,7 @@ const ALLOWED_ROLES = [
 // ==========================================
 exports.createUser = async (req, res) => {
   try {
-    const { name, email, password, role } = req.body;
+    const { name, email, password, role, address, mobile_number, phone } = req.body;
 
     // Validate required fields
     if (
@@ -47,10 +47,10 @@ exports.createUser = async (req, res) => {
       });
     }
 
-    if (password.length < 8) {
+    if (password.length < 6) {
       return res.status(400).json({
         success: false,
-        message: "Password must contain at least 8 characters",
+        message: "Password must contain at least 6 characters",
       });
     }
 
@@ -76,6 +76,29 @@ exports.createUser = async (req, res) => {
       });
     }
 
+    // Process & validate mobile number if provided
+    const rawMobile = (mobile_number || phone || "").toString().trim();
+    if (rawMobile) {
+      const cleanDigits = rawMobile.replace(/[\s+\-()]/g, '');
+      if (cleanDigits.length < 10) {
+        return res.status(400).json({
+          success: false,
+          message: "Please provide a valid 10-digit mobile number",
+        });
+      }
+
+      const existingPhone = await User.findOne({
+        mobile_number: { $regex: new RegExp(`^${cleanDigits.slice(-10)}$`, 'i') }
+      });
+
+      if (existingPhone) {
+        return res.status(409).json({
+          success: false,
+          message: "Mobile number is already registered with another account",
+        });
+      }
+    }
+
     // Hash password before storing
     const hashedPassword = await bcrypt.hash(password, 12);
 
@@ -84,7 +107,28 @@ exports.createUser = async (req, res) => {
       email: normalizedEmail,
       password: hashedPassword,
       role: userRole,
+      mobile_number: rawMobile,
+      address: address && typeof address === "string" ? address.trim() : "",
     });
+
+    // Auto-sync customer to Customer directory if Customer role
+    if (userRole === "Customer" || userRole === "User") {
+      try {
+        const Customer = require("../model/customerModel");
+        await Customer.findOneAndUpdate(
+          { email: normalizedEmail },
+          {
+            name: name.trim(),
+            email: normalizedEmail,
+            mobile: rawMobile || "N/A",
+            address: address && typeof address === "string" ? address.trim() : "Registered online customer",
+          },
+          { upsert: true, new: true }
+        );
+      } catch (syncErr) {
+        console.warn("Customer directory sync note:", syncErr.message);
+      }
+    }
 
     // Never return the password hash
     const safeUser = user.toObject();
@@ -519,7 +563,7 @@ exports.getUserById = async (req, res) => {
 exports.updateUser = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, email, password, role } = req.body;
+    const { name, email, password, role, mobile_number, phone, address } = req.body;
 
     if (!mongoose.isValidObjectId(id)) {
       return res.status(400).json({
@@ -571,6 +615,36 @@ exports.updateUser = async (req, res) => {
       }
 
       updates.email = normalizedEmail;
+    }
+
+    if (mobile_number !== undefined || phone !== undefined) {
+      const rawMobile = (mobile_number !== undefined ? mobile_number : phone || "").toString().trim();
+      if (rawMobile) {
+        const cleanDigits = rawMobile.replace(/[\s+\-()]/g, '');
+        if (cleanDigits.length < 10) {
+          return res.status(400).json({
+            success: false,
+            message: "Mobile number must contain at least 10 digits",
+          });
+        }
+
+        const duplicatePhone = await User.findOne({
+          mobile_number: { $regex: new RegExp(`^${cleanDigits.slice(-10)}$`, 'i') },
+          _id: { $ne: id },
+        });
+
+        if (duplicatePhone) {
+          return res.status(409).json({
+            success: false,
+            message: "Mobile number is already registered to another account",
+          });
+        }
+      }
+      updates.mobile_number = rawMobile;
+    }
+
+    if (address !== undefined) {
+      updates.address = address.toString().trim();
     }
 
     if (role !== undefined) {

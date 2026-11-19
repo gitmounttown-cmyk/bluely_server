@@ -76,14 +76,32 @@ const createOrder = async (req, res) => {
       status,
       orderStatus,
       user: req.user ? req.user.id : null,
-      invoiceNo: req.body.invoiceNo || `V26-${Math.floor(100 + Math.random() * 900)}`,
-      deliveryNote: req.body.deliveryNote || `DNTV26-${Math.floor(100 + Math.random() * 900)}`,
+      invoiceNo: req.body.invoiceNo || `BLY26-${Math.floor(100 + Math.random() * 900)}`,
+      deliveryNote: req.body.deliveryNote || `DNTBLY26-${Math.floor(100 + Math.random() * 900)}`,
       termsOfPayment: req.body.termsOfPayment || "Delayed Bank Transfer (Days / Weeks / Month based delay)",
       dispatchedThrough: req.body.dispatchedThrough || "Direct",
       termsOfDelivery: req.body.termsOfDelivery || "Direct Hospital Delivery",
     };
 
     const newOrder = await Order.create(orderData);
+
+    // Requirement 8: Automated stock deduction upon order / POS sale completion
+    for (const item of items) {
+      if (item.product) {
+        try {
+          const prod = await Product.findById(item.product);
+          if (prod) {
+            const currentStock = Number(prod.stock) || 0;
+            const deductQty = Number(item.quantity) || 1;
+            prod.stock = Math.max(0, currentStock - deductQty);
+            await prod.save();
+          }
+        } catch (stockErr) {
+          console.error(`Failed to deduct stock for product ${item.product}:`, stockErr);
+        }
+      }
+    }
+
     res.status(201).json({ success: true, order: newOrder, data: newOrder });
   } catch (error) {
     console.error("Create order error:", error);

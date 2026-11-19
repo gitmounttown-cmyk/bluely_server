@@ -40,9 +40,21 @@ const productSchema = new mongoose.Schema(
       min: 0,
     },
 
+    hsn_code: {
+      type: String,
+      default: "3402",
+      trim: true,
+    },
+
+    min_stock_level: {
+      type: Number,
+      default: 10,
+      min: 0,
+    },
+
     lowStockThreshold: {
       type: Number,
-      default: 5,
+      default: 10,
       min: 0,
     },
   },
